@@ -3,11 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Event } from './event.entity';
 import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
+import { DeepseekService } from '../deepseek/deepseek.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Event])],
   controllers: [EventsController],
-  providers: [EventsService],
+  providers: [EventsService, DeepseekService],
   exports: [EventsService],
 })
 export class EventsModule {}
