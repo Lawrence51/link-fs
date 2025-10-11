@@ -59,7 +59,6 @@ export class DeepseekService {
   }
 
   async fetchEvents(city = '杭州', targetDate?: string) {
-    const { default: axios } = await import('axios');
     const date = targetDate ?? dayjs().add(7, 'day').format('YYYY-MM-DD');
     const prompt = this.buildPrompt(city, date);
 
@@ -71,33 +70,32 @@ export class DeepseekService {
     try {
       let content = '';
       if (this.openAICompat) {
-        const res = await axios.post(
-          `${this.endpoint}/chat/completions`,
-          {
+        const res = await fetch(`${this.endpoint}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
             model: this.model,
             messages: [
               { role: 'system', content: 'You are a data API. Respond with strict JSON only.' },
               { role: 'user', content: prompt },
             ],
             temperature: 0.2,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        );
-        content = res.data?.choices?.[0]?.message?.content ?? '';
+          }),
+        });
+        const data: any = await res.json();
+        content = data?.choices?.[0]?.message?.content ?? '';
       } else {
         // Non-OpenAI protocol placeholder
-        const res = await axios.post(
-          `${this.endpoint}/chat`,
-          { model: this.model, input: prompt },
-          { headers: { Authorization: `Bearer ${this.apiKey}` } },
-        );
-        content = res.data?.output ?? '';
+        const res = await fetch(`${this.endpoint}/chat`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: this.model, input: prompt }),
+        });
+        const data: any = await res.json();
+        content = data?.output ?? '';
       }
 
       let jsonArr: unknown;
