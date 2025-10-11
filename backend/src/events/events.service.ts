@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Event } from './event.entity.js';
+import { Event } from './event.entity';
 import crypto from 'crypto';
-import { QueryEventsDto } from './dto/query-events.dto.js';
+import { QueryEventsDto } from './dto/query-events.dto';
 
 export type EventInput = Omit<Event, 'id' | 'created_at' | 'updated_at' | 'hash'> & { hash?: string };
 

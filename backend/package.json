@@ -2,7 +2,7 @@
   "name": "ds-events-backend",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "start": "ts-node -r tsconfig-paths/register src/main.ts",
     "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",

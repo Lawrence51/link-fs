@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { z } from 'zod';
 import dayjs from 'dayjs';
 
@@ -60,6 +59,7 @@ export class DeepseekService {
   }
 
   async fetchEvents(city = '杭州', targetDate?: string) {
+    const { default: axios } = await import('axios');
     const date = targetDate ?? dayjs().add(7, 'day').format('YYYY-MM-DD');
     const prompt = this.buildPrompt(city, date);
 

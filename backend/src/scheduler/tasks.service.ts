@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { DeepseekService } from '../deepseek/deepseek.service.js';
-import { EventsService } from '../events/events.service.js';
+import { DeepseekService } from '../deepseek/deepseek.service';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class TasksService {

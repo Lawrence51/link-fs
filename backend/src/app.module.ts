@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
-import { Event } from './events/event.entity.js';
-import { EventsModule } from './events/events.module.js';
-import { DeepseekService } from './deepseek/deepseek.service.js';
-import { TasksService } from './scheduler/tasks.service.js';
+import { Event } from './events/event.entity';
+import { EventsModule } from './events/events.module';
+import { DeepseekService } from './deepseek/deepseek.service';
+import { TasksService } from './scheduler/tasks.service';
 
 @Module({
   imports: [
