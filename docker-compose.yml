@@ -1,0 +1,26 @@
+version: '3.9'
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ds_events_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ds_events
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app123
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+  adminer:
+    image: adminer:4
+    container_name: ds_events_adminer
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      - mysql
+volumes:
+  mysql_data:
