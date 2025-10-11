@@ -15,10 +15,10 @@ export class Event {
   @Column({ length: 50, default: '杭州' })
   city!: string;
 
-  @Column({ length: 200, nullable: true })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   venue!: string | null;
 
-  @Column({ length: 300, nullable: true })
+  @Column({ type: 'varchar', length: 300, nullable: true })
   address!: string | null;
 
   @Column({ type: 'date' })
@@ -27,13 +27,13 @@ export class Event {
   @Column({ type: 'date', nullable: true })
   end_date!: string | null;
 
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   source_url!: string | null;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   price_range!: string | null;
 
-  @Column({ length: 200, nullable: true })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   organizer!: string | null;
 
   @Column({ length: 128 })
