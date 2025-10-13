@@ -33,7 +33,9 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app
-    command: sh -c "npm i -g pnpm pm2 && pnpm install && pm2-runtime start npm --name link-fs-backend -- run dev"
+      - /app/node_modules
+    command: >
+      sh -lc "npm i -g pm2 && npm install --loglevel=warn && pm2-runtime start npm --name link-fs-backend -- run dev"
     depends_on:
       - mysql
   nginx:
