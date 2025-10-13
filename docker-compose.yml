@@ -29,13 +29,14 @@ services:
     environment:
       DB_HOST: mysql
       CI: "true"
+      NPM_CONFIG_LEGACY_PEER_DEPS: "true"
     env_file:
       - ./backend/.env
     volumes:
       - ./backend:/app
       - /app/node_modules
     command: >
-      sh -lc "npm i -g pm2 && npm install --loglevel=warn && pm2-runtime start npm --name link-fs-backend -- run dev"
+      sh -lc "npm i -g pm2 && npm install --loglevel=warn --legacy-peer-deps && pm2-runtime start npm --name link-fs-backend -- run dev"
     depends_on:
       - mysql
   nginx:
