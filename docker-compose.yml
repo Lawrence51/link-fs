@@ -28,6 +28,7 @@ services:
     working_dir: /app
     environment:
       DB_HOST: mysql
+      CI: "true"
     env_file:
       - ./backend/.env
     volumes:
