@@ -1,56 +1,195 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from './event.entity';
 import crypto from 'crypto';
 import { QueryEventsDto } from './dto/query-events.dto';
 
+/**
+ * 事件输入数据类型
+ * 用于创建或更新事件时的数据结构
+ */
 export type EventInput = Omit<Event, 'id' | 'created_at' | 'updated_at' | 'hash'> & { hash?: string };
+
+/**
+ * 批量操作结果
+ */
+export interface UpsertResult {
+  inserted: number;
+  updated: number;
+}
+
+/**
+ * 事件查询结果
+ */
+export interface EventQueryResult {
+  items: Event[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+  
   constructor(
     @InjectRepository(Event)
-    private readonly repo: Repository<Event>,
+    private readonly eventRepository: Repository<Event>,
   ) {}
 
-  private computeHash(e: EventInput) {
-    const base = `${e.title}|${e.start_date}|${e.venue ?? ''}|${e.city ?? ''}`;
-    return crypto.createHash('md5').update(base).digest('hex');
+  /**
+   * 计算事件的唯一标识
+   * 
+   * 基于标题、开始日期、场馆和城市生成 MD5 哈希值
+   * 用于防止重复事件的插入
+   * 
+   * @param eventData 事件数据
+   * @returns MD5 哈希字符串
+   */
+  private calculateEventHash(eventData: EventInput): string {
+    const hashComponents = [
+      eventData.title,
+      eventData.start_date,
+      eventData.venue ?? '',
+      eventData.city ?? ''
+    ];
+    
+    const baseString = hashComponents.join('|');
+    return crypto.createHash('md5').update(baseString).digest('hex');
   }
 
-  async upsertMany(items: EventInput[]) {
-    const rows = items.map((e) => ({ ...e, hash: e.hash ?? this.computeHash(e) }));
-    if (rows.length === 0) return { inserted: 0, updated: 0 };
+  /**
+   * 批量插入或更新事件
+   * 
+   * 根据事件的 hash 值判断是新增还是更新
+   * 如果 hash 已存在，则更新现有记录
+   * 如果 hash 不存在，则插入新记录
+   * 
+   * @param eventInputs 事件数据数组
+   * @returns 操作结果，包含插入和更新的数量
+   */
+  async upsertManyEvents(eventInputs: EventInput[]): Promise<UpsertResult> {
+    if (eventInputs.length === 0) {
+      this.logger.warn('尝试批量更新空的事件列表');
+      return { inserted: 0, updated: 0 };
+    }
 
-    // Upsert by unique hash
-    const result = await this.repo
-      .createQueryBuilder()
-      .insert()
-      .into(Event)
-      .values(rows)
-      .orUpdate(['title', 'type', 'city', 'venue', 'address', 'start_date', 'end_date', 'source_url', 'price_range', 'organizer', 'updated_at'], ['hash'])
-      .execute();
+    // 为每个事件计算 hash（如果没有提供）
+    const eventsWithHash = eventInputs.map((eventData) => ({
+      ...eventData,
+      hash: eventData.hash ?? this.calculateEventHash(eventData)
+    }));
 
-    // TypeORM doesn't return exact updated count easily; approximate
-    return { inserted: result.identifiers.length, updated: rows.length - result.identifiers.length };
+    this.logger.log(`开始批量更新 ${eventsWithHash.length} 个事件`);
+
+    try {
+      // 基于 hash 字段进行 upsert 操作
+      const result = await this.eventRepository
+        .createQueryBuilder()
+        .insert()
+        .into(Event)
+        .values(eventsWithHash)
+        .orUpdate([
+          'title', 'type', 'city', 'venue', 'address', 
+          'start_date', 'end_date', 'source_url', 
+          'price_range', 'organizer', 'updated_at'
+        ], ['hash'])
+        .execute();
+
+      // TypeORM 无法精确返回更新数量，这里做近似计算
+      const insertedCount = result.identifiers.length;
+      const updatedCount = eventsWithHash.length - insertedCount;
+      
+      this.logger.log(`事件批量更新完成: 新增 ${insertedCount} 个，更新 ${updatedCount} 个`);
+      
+      return { inserted: insertedCount, updated: updatedCount };
+    } catch (error) {
+      this.logger.error('批量更新事件失败', error);
+      throw new Error(`批量更新事件失败: ${error.message}`);
+    }
   }
 
-  async list(q: QueryEventsDto) {
-    const qb = this.repo.createQueryBuilder('e');
+  /**
+   * 分页查询事件列表
+   * 
+   * 支持多种过滤条件：类型、城市、关键词搜索、日期范围等
+   * 
+   * @param queryOptions 查询选项
+   * @returns 分页的事件查询结果
+   */
+  async findEventsWithPagination(queryOptions: QueryEventsDto): Promise<EventQueryResult> {
+    const queryBuilder = this.eventRepository.createQueryBuilder('event');
 
-    if (q.type) qb.andWhere('e.type = :type', { type: q.type });
-    if (q.city) qb.andWhere('e.city = :city', { city: q.city });
-    if (q.q) qb.andWhere('(e.title LIKE :kw OR e.venue LIKE :kw OR e.address LIKE :kw)', { kw: `%${q.q}%` });
-    if (q.from) qb.andWhere('e.start_date >= :from', { from: q.from });
-    if (q.to) qb.andWhere('(e.end_date IS NULL AND e.start_date <= :to) OR (e.end_date IS NOT NULL AND e.end_date <= :to)', { to: q.to });
+    // 根据事件类型筛选
+    if (queryOptions.type) {
+      queryBuilder.andWhere('event.type = :type', { type: queryOptions.type });
+    }
 
-    const page = q.page ?? 1;
-    const pageSize = q.pageSize ?? 10;
+    // 根据城市筛选
+    if (queryOptions.city) {
+      queryBuilder.andWhere('event.city = :city', { city: queryOptions.city });
+    }
 
-    qb.orderBy('e.start_date', 'ASC').skip((page - 1) * pageSize).take(pageSize);
+    // 关键词搜索（标题、场馆、地址）
+    if (queryOptions.q) {
+      queryBuilder.andWhere(
+        '(event.title LIKE :keyword OR event.venue LIKE :keyword OR event.address LIKE :keyword)',
+        { keyword: `%${queryOptions.q}%` }
+      );
+    }
 
-    const [items, total] = await qb.getManyAndCount();
-    return { items, total, page, pageSize };
+    // 日期范围筛选
+    this.applyDateRangeFilter(queryBuilder, queryOptions);
+
+    // 分页设置
+    const currentPage = queryOptions.page ?? 1;
+    const itemsPerPage = queryOptions.pageSize ?? 10;
+    const skipCount = (currentPage - 1) * itemsPerPage;
+
+    queryBuilder
+      .orderBy('event.start_date', 'ASC')
+      .skip(skipCount)
+      .take(itemsPerPage);
+
+    const [events, totalCount] = await queryBuilder.getManyAndCount();
+    
+    this.logger.log(`查询事件列表: 第${currentPage}页，每页${itemsPerPage}个，共${totalCount}个结果`);
+    
+    return {
+      items: events,
+      total: totalCount,
+      page: currentPage,
+      pageSize: itemsPerPage
+    };
+  }
+
+  /**
+   * 应用日期范围筛选条件
+   * 
+   * @param queryBuilder 查询构建器
+   * @param options 查询选项
+   */
+  private applyDateRangeFilter(queryBuilder: any, options: QueryEventsDto): void {
+    // 筛选开始日期
+    if (options.from) {
+      queryBuilder.andWhere('event.start_date >= :fromDate', { fromDate: options.from });
+    }
+
+    // 筛选结束日期（考虑单日事件和多日事件）
+    if (options.to) {
+      queryBuilder.andWhere(
+        '(event.end_date IS NULL AND event.start_date <= :toDate) OR (event.end_date IS NOT NULL AND event.end_date <= :toDate)',
+        { toDate: options.to }
+      );
+    }
+  }
+  // 保持向后兼容的方法名
+  async upsertMany(items: EventInput[]): Promise<UpsertResult> {
+    return this.upsertManyEvents(items);
+  }
+
+  async list(queryOptions: QueryEventsDto): Promise<EventQueryResult> {
+    return this.findEventsWithPagination(queryOptions);
   }
 }
