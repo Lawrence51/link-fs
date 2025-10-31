@@ -35,12 +35,9 @@ services:
         NPM_REGISTRY: https://registry.npmmirror.com
     container_name: ds_events_backend
     environment:
-      DB_HOST: host.docker.internal
-      DB_PORT: 3306
+      DB_HOST: mysql
     env_file:
       - ./backend/.env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - mysql
     # 调试期暴露后端端口，便于直接验证 http://<host>:3000/events
@@ -62,8 +59,6 @@ services:
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - mysql
       - backend
