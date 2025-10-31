@@ -13,8 +13,7 @@ RUN apk add --no-cache ca-certificates openssl wget && update-ca-certificates
 RUN npm config set fetch-retries 5 \
  && npm config set fetch-retry-factor 2 \
  && npm config set fetch-retry-mintimeout 10000 \
- && npm config set fetch-retry-maxtimeout 60000 \
- && npm config set timeout 120000
+ && npm config set fetch-retry-maxtimeout 60000
 
 # Install deps (keep dev deps for ts-node-dev)
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
