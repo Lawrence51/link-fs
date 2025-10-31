@@ -42,6 +42,11 @@ export class EventsController {
     return this.eventsService.findEventsWithPagination(searchCriteria);
   }
 
+  @Get('health')
+  async health() {
+    return { status: 'ok' };
+  }
+
   /**
    * 同步事件数据
    * 
