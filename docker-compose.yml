@@ -34,13 +34,14 @@ services:
       DB_HOST: mysql
       CI: "true"
       NPM_CONFIG_LEGACY_PEER_DEPS: "true"
+      NPM_CONFIG_REGISTRY: https://registry.npmmirror.com
     env_file:
       - ./backend/.env
     volumes:
       - ./backend:/app
       - /app/node_modules
     command: >
-      sh -lc "npm i -g pm2 && npm install --loglevel=warn --legacy-peer-deps && pm2-runtime start npm --name link-fs-backend -- run dev"
+      sh -lc "(npm ci || npm install --loglevel=warn --legacy-peer-deps) && npm run dev"
     depends_on:
       - mysql
     # 调试期暴露后端端口，便于直接验证 http://<host>:3000/events
@@ -53,6 +54,10 @@ services:
       retries: 5
     networks:
       - app-net
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 223.5.5.5
   nginx:
     image: nginx:alpine
     container_name: ds_events_nginx
