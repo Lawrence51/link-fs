@@ -14,6 +14,8 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    networks:
+      - app-net
   adminer:
     image: adminer:4
     container_name: ds_events_adminer
@@ -22,6 +24,8 @@ services:
       - '8080:8080'
     depends_on:
       - mysql
+    networks:
+      - app-net
   backend:
     image: node:18-alpine
     container_name: ds_events_backend
@@ -39,6 +43,16 @@ services:
       sh -lc "npm i -g pm2 && npm install --loglevel=warn --legacy-peer-deps && pm2-runtime start npm --name link-fs-backend -- run dev"
     depends_on:
       - mysql
+    # 调试期暴露后端端口，便于直接验证 http://<host>:3000/events
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-net
   nginx:
     image: nginx:alpine
     container_name: ds_events_nginx
@@ -51,5 +65,11 @@ services:
     depends_on:
       - mysql
       - backend
+    networks:
+      - app-net
 volumes:
   mysql_data:
+
+networks:
+  app-net:
+    driver: bridge
