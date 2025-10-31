@@ -4,18 +4,15 @@ services:
     image: mysql:8.0
     container_name: ds_events_mysql
     restart: unless-stopped
+    network_mode: host
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ds_events
       MYSQL_USER: app
       MYSQL_PASSWORD: app123
-    ports:
-      - '3306:3306'
     volumes:
       - mysql_data:/var/lib/mysql
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
-    networks:
-      - app-net
   adminer:
     image: adminer:4
     container_name: ds_events_adminer
@@ -34,22 +31,19 @@ services:
       args:
         NPM_REGISTRY: https://registry.npmmirror.com
     container_name: ds_events_backend
+    network_mode: host
     environment:
-      DB_HOST: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
     env_file:
       - ./backend/.env
     depends_on:
       - mysql
-    # 调试期暴露后端端口，便于直接验证 http://<host>:3000/events
-    ports:
-      - '3000:3000'
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/events/health || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
-    networks:
-      - app-net
   nginx:
     image: nginx:alpine
     container_name: ds_events_nginx
