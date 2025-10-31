@@ -17,7 +17,7 @@ RUN npm config set fetch-retries 5 \
 
 # Install deps (keep dev deps for ts-node-dev)
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install --legacy-peer-deps --loglevel=warn; fi
+RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps; else npm install --legacy-peer-deps --loglevel=warn; fi
 
 # Copy source
 COPY tsconfig*.json ./
