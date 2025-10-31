@@ -30,6 +30,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
+      args:
+        NPM_REGISTRY: https://registry.npmmirror.com
     container_name: ds_events_backend
     environment:
       DB_HOST: mysql

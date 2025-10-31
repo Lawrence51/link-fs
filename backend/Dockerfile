@@ -6,6 +6,16 @@ WORKDIR /app
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
 
+# Prepare tools and certificates
+RUN apk add --no-cache ca-certificates openssl wget && update-ca-certificates
+
+# Improve npm resilience
+RUN npm config set fetch-retries 5 \
+ && npm config set fetch-retry-factor 2 \
+ && npm config set fetch-retry-mintimeout 10000 \
+ && npm config set fetch-retry-maxtimeout 60000 \
+ && npm config set timeout 120000
+
 # Install deps (keep dev deps for ts-node-dev)
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install --legacy-peer-deps --loglevel=warn; fi
