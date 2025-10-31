@@ -27,37 +27,26 @@ services:
     networks:
       - app-net
   backend:
-    image: node:18-alpine
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: ds_events_backend
-    working_dir: /app
     environment:
       DB_HOST: mysql
-      CI: "true"
-      NPM_CONFIG_LEGACY_PEER_DEPS: "true"
-      NPM_CONFIG_REGISTRY: https://registry.npmmirror.com
     env_file:
       - ./backend/.env
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    command: >
-      sh -lc "(npm ci || npm install --loglevel=warn --legacy-peer-deps) && npm run dev"
     depends_on:
       - mysql
     # 调试期暴露后端端口，便于直接验证 http://<host>:3000/events
     ports:
       - '3000:3000'
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/events/health || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
     networks:
       - app-net
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-      - 223.5.5.5
   nginx:
     image: nginx:alpine
     container_name: ds_events_nginx
