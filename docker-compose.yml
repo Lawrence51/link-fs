@@ -38,7 +38,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - ./backend/src:/app/src:ro
+      - ./backend/src:/app/src
     depends_on:
       - mysql
     healthcheck:
