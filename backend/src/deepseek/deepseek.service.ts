@@ -79,7 +79,7 @@ export class DeepseekService {
   private buildEventQueryPrompt(city: string, targetDate: string): string {
     return `请你根据公开渠道，列出${city}在日期 ${targetDate}（该日所在周的当天）相关的展会(expo)与演唱会(concert)。
 
-严格输出 JSON 数组，不要有任何多余文本。每个元素尽量包含：
+严格输出 JSON 数组，不要有任何多余文本,数据要进行核实，不要出现幻觉。每个元素尽量包含：
 {
   "title": "事件标题",
   "type": "expo" | "concert",
