@@ -372,66 +372,99 @@ export class DeepseekService {
 
     const endpoint = this.qiniuConfig.endpoint.replace(/\/$/, '');
     const prompt = this.buildVerificationPrompt(event, city);
+    const maxAttempts = 3;
+    let backoffMs = 1000;
 
-    try {
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.qiniuConfig.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.qiniuConfig.model,
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个严格的事实核查助手。请仅根据公开可信来源判断活动是否真实存在，返回 JSON 结果，不要输出多余文本。',
-            },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0,
-        }),
-      });
-
-      if (!response.ok) {
-        this.logger.error('七牛云验证接口调用失败', {
-          status: response.status,
-          statusText: response.statusText,
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const response = await fetch(`${endpoint}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.qiniuConfig.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.qiniuConfig.model,
+            messages: [
+              {
+                role: 'system',
+                content: '你是一个严格的事实核查助手。请仅根据公开可信来源判断活动是否真实存在，返回 JSON 结果，不要输出多余文本。',
+              },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0,
+          }),
         });
-        return false;
-      }
 
-      const responseData = await response.json();
-      const content = responseData?.choices?.[0]?.message?.content ?? '';
-      const verificationResult = this.extractJsonObjectFromResponse(content);
+        if (response.status === 429) {
+          this.logger.warn('七牛云验证接口触发限流', {
+            event: event.title,
+            attempt,
+          });
 
-      if (!verificationResult) {
-        this.logger.warn('未能解析七牛云的验证响应，视为未通过', {
+          if (attempt < maxAttempts) {
+            await this.sleep(backoffMs);
+            backoffMs *= 2;
+            continue;
+          }
+
+          return false;
+        }
+
+        if (!response.ok) {
+          this.logger.error('七牛云验证接口调用失败', {
+            status: response.status,
+            statusText: response.statusText,
+          });
+          return false;
+        }
+
+        const responseData = await response.json();
+        const content = responseData?.choices?.[0]?.message?.content ?? '';
+        const verificationResult = this.extractJsonObjectFromResponse(content);
+
+        if (!verificationResult) {
+          this.logger.warn('未能解析七牛云的验证响应，视为未通过', {
+            event: event.title,
+          });
+          return false;
+        }
+
+        if (typeof verificationResult.verified !== 'boolean') {
+          this.logger.warn('七牛云返回的验证结果缺少 verified 字段，视为未通过', {
+            event: event.title,
+            verificationResult,
+          });
+          return false;
+        }
+
+        return verificationResult.verified === true;
+      } catch (error) {
+        this.logger.error('调用七牛云验证接口时发生异常', {
+          error: (error as Error).message,
           event: event.title,
+          attempt,
         });
+
+        if (attempt < maxAttempts) {
+          await this.sleep(backoffMs);
+          backoffMs *= 2;
+          continue;
+        }
+
         return false;
       }
-
-      if (typeof verificationResult.verified !== 'boolean') {
-        this.logger.warn('七牛云返回的验证结果缺少 verified 字段，视为未通过', {
-          event: event.title,
-          verificationResult,
-        });
-        return false;
-      }
-
-      return verificationResult.verified === true;
-    } catch (error) {
-      this.logger.error('调用七牛云验证接口时发生异常', {
-        error: (error as Error).message,
-        event: event.title,
-      });
-      return false;
     }
+
+    return false;
   }
 
   async verifyEventDirectly(event: ParsedEvent, city: string): Promise<boolean> {
     return this.verifyEventWithQiniu(event, city);
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private extractJsonObjectFromResponse(responseText: string): any | null {
