@@ -37,6 +37,8 @@ services:
       DB_PORT: 3306
     env_file:
       - ./backend/.env
+    volumes:
+      - ./backend/src:/app/src:ro
     depends_on:
       - mysql
     healthcheck:
