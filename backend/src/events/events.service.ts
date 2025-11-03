@@ -167,21 +167,36 @@ export class EventsService {
   /**
    * 应用日期范围筛选条件
    * 
+   * 逻辑说明：筛选出与查询时间段 [from, to] 有重叠的活动
+   * 
+   * 重叠条件：
+   * 1. 活动开始日期 <= 查询结束日期（to）
+   * 2. 活动结束日期 >= 查询开始日期（from）
+   * 
+   * 对于单日活动（end_date 为 NULL），将 start_date 视为结束日期
+   * 
    * @param queryBuilder 查询构建器
    * @param options 查询选项
    */
   private applyDateRangeFilter(queryBuilder: any, options: QueryEventsDto): void {
-    // 筛选开始日期
-    if (options.from) {
-      queryBuilder.andWhere('event.start_date >= :fromDate', { fromDate: options.from });
-    }
-
-    // 筛选结束日期（考虑单日事件和多日事件）
-    if (options.to) {
+    if (options.from && options.to) {
+      // 同时有起止日期：筛选与 [from, to] 有重叠的活动
       queryBuilder.andWhere(
-        '(event.end_date IS NULL AND event.start_date <= :toDate) OR (event.end_date IS NOT NULL AND event.end_date <= :toDate)',
-        { toDate: options.to }
+        'event.start_date <= :toDate AND ' +
+        '((event.end_date IS NULL AND event.start_date >= :fromDate) OR ' +
+        '(event.end_date IS NOT NULL AND event.end_date >= :fromDate))',
+        { fromDate: options.from, toDate: options.to }
       );
+    } else if (options.from) {
+      // 只有起始日期：筛选在 from 之后结束的活动
+      queryBuilder.andWhere(
+        '(event.end_date IS NULL AND event.start_date >= :fromDate) OR ' +
+        '(event.end_date IS NOT NULL AND event.end_date >= :fromDate)',
+        { fromDate: options.from }
+      );
+    } else if (options.to) {
+      // 只有结束日期：筛选在 to 之前开始的活动
+      queryBuilder.andWhere('event.start_date <= :toDate', { toDate: options.to });
     }
   }
   // 保持向后兼容的方法名

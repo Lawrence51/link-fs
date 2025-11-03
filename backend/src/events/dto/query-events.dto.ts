@@ -22,15 +22,15 @@ export class QueryEventsDto {
   @IsString()
   to?: string; // YYYY-MM-DD
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @IsOptional()
-  page?: number = 1;
+  page?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @IsOptional()
-  pageSize?: number = 10;
+  pageSize?: number;
 }
