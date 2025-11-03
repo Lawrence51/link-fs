@@ -23,8 +23,7 @@ export function App() {
       const res = await fetchEvents({ city, type: type || undefined, q, from, to, page, pageSize })
       setItems(res.items)
       setTotal(res.total)
-      setPage(res.page)
-      setPageSize(res.pageSize)
+      // 不需要从后端响应中覆盖 page 和 pageSize，使用前端状态即可
     } finally {
       setLoading(false)
     }
