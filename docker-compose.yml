@@ -35,6 +35,9 @@ services:
     environment:
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
+      QINIU_ENDPOINT: https://api.qnaigc.com/v1
+      QINIU_MODEL: claude-4.5-sonnet
+      QINIU_API_KEY: sk-56f64c8925452210708d9a46a7353e968d6c4737d759fabbb7b079751e4fd669
     env_file:
       - ./backend/.env
     volumes:

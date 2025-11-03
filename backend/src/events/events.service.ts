@@ -180,22 +180,19 @@ export class EventsService {
    */
   private applyDateRangeFilter(queryBuilder: any, options: QueryEventsDto): void {
     if (options.from && options.to) {
-      // 同时有起止日期：筛选与 [from, to] 有重叠的活动
+      // 与查询区间 [from, to] 有交集的活动
       queryBuilder.andWhere(
-        'event.start_date <= :toDate AND ' +
-        '((event.end_date IS NULL AND event.start_date >= :fromDate) OR ' +
-        '(event.end_date IS NOT NULL AND event.end_date >= :fromDate))',
+        'event.start_date <= :toDate AND COALESCE(event.end_date, event.start_date) >= :fromDate',
         { fromDate: options.from, toDate: options.to }
       );
     } else if (options.from) {
-      // 只有起始日期：筛选在 from 之后结束的活动
+      // 仅限制不早于 from 结束
       queryBuilder.andWhere(
-        '(event.end_date IS NULL AND event.start_date >= :fromDate) OR ' +
-        '(event.end_date IS NOT NULL AND event.end_date >= :fromDate)',
+        'COALESCE(event.end_date, event.start_date) >= :fromDate',
         { fromDate: options.from }
       );
     } else if (options.to) {
-      // 只有结束日期：筛选在 to 之前开始的活动
+      // 仅限制开始时间不晚于 to
       queryBuilder.andWhere('event.start_date <= :toDate', { toDate: options.to });
     }
   }

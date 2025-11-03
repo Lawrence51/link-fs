@@ -35,14 +35,23 @@ interface DeepSeekConfig {
   isOpenAICompatible: boolean;
 }
 
+interface QiniuAIConfig {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+}
+
 @Injectable()
 export class DeepseekService {
   private readonly logger = new Logger(DeepseekService.name);
   private readonly config: DeepSeekConfig;
+  private readonly qiniuConfig: QiniuAIConfig;
 
   constructor(private readonly configService: ConfigService) {
     this.config = this.loadConfiguration();
+    this.qiniuConfig = this.loadQiniuConfiguration();
     this.validateConfiguration();
+    this.validateQiniuConfiguration();
   }
 
   /**
@@ -57,12 +66,26 @@ export class DeepseekService {
     };
   }
 
+  private loadQiniuConfiguration(): QiniuAIConfig {
+    return {
+      endpoint: this.configService.get<string>('QINIU_ENDPOINT', 'https://api.qnaigc.com/v1'),
+      model: this.configService.get<string>('QINIU_MODEL', 'claude-4.5-sonnet'),
+      apiKey: this.configService.get<string>('QINIU_API_KEY'),
+    };
+  }
+
   /**
    * 验证配置有效性
    */
   private validateConfiguration(): void {
     if (!this.config.apiKey) {
       this.logger.warn('⚠️  DEEPSEEK_API_KEY未设置，将返回空的事件列表');
+    }
+  }
+
+  private validateQiniuConfiguration(): void {
+    if (!this.qiniuConfig.apiKey) {
+      this.logger.error('❌ QINIU_API_KEY 未设置，事件验证将失败');
     }
   }
 
@@ -147,7 +170,7 @@ export class DeepseekService {
    */
   async fetchEventsFromAI(city = '杭州', targetDate?: string): Promise<EventFetchResult> {
     const queryDate = targetDate ?? this.getDefaultTargetDate();
-    
+
     this.logger.log(`🔍 开始获取 ${city} 在 ${queryDate} 的事件信息`);
 
     // 检查API密钥
@@ -156,12 +179,17 @@ export class DeepseekService {
       return { items: [], targetDate: queryDate };
     }
 
+    if (!this.qiniuConfig.apiKey) {
+      this.logger.error('❌ 七牛云验证密钥未配置，无法验证事件数据');
+      return { items: [], targetDate: queryDate };
+    }
+
     try {
       const aiResponse = await this.callDeepSeekAPI(city, queryDate);
-      const validatedEvents = await this.parseAndValidateEvents(aiResponse);
-      
+      const validatedEvents = await this.parseAndValidateEvents(aiResponse, city);
+
       this.logger.log(`✅ 成功获取并验证了 ${validatedEvents.length} 个有效事件`);
-      
+
       return { items: validatedEvents, targetDate: queryDate };
     } catch (error) {
       this.logger.error('❌ 获取事件信息失败', {
@@ -251,7 +279,7 @@ export class DeepseekService {
   /**
    * 解析并验证AI返回的事件数据
    */
-  private async parseAndValidateEvents(aiResponse: string): Promise<ParsedEvent[]> {
+  private async parseAndValidateEvents(aiResponse: string, city: string): Promise<ParsedEvent[]> {
     if (!aiResponse?.trim()) {
       this.logger.warn('AI返回了空的响应内容');
       return [];
@@ -273,14 +301,14 @@ export class DeepseekService {
     }
 
     // 验证并过滤有效的事件数据
-    const validatedEvents: ParsedEvent[] = [];
+    const schemaValidatedEvents: ParsedEvent[] = [];
     let invalidCount = 0;
 
     for (const item of rawEventData) {
       const validationResult = EventSchema.safeParse(item);
       
       if (validationResult.success) {
-        validatedEvents.push(validationResult.data);
+        schemaValidatedEvents.push(validationResult.data);
       } else {
         invalidCount++;
         this.logger.debug('发现无效的事件数据', {
@@ -294,7 +322,137 @@ export class DeepseekService {
       this.logger.warn(`过滤掉 ${invalidCount} 个无效的事件数据`);
     }
 
-    return validatedEvents;
+    const verifiedEvents: ParsedEvent[] = [];
+    let failedVerifications = 0;
+
+    for (const event of schemaValidatedEvents) {
+      const isVerified = await this.verifyEventWithQiniu(event, city);
+
+      if (isVerified) {
+        verifiedEvents.push(event);
+      } else {
+        failedVerifications++;
+        this.logger.warn(`❌ 七牛云验证未通过，跳过事件: ${event.title}`);
+      }
+    }
+
+    if (failedVerifications > 0) {
+      this.logger.warn(`共有 ${failedVerifications} 个事件未通过七牛云验证`);
+    }
+
+    return verifiedEvents;
+  }
+
+  private buildVerificationPrompt(event: ParsedEvent, city: string): string {
+    const endDate = event.end_date ?? 'null';
+    return `请核实以下活动是否真实存在，并且可以在公开渠道中查证。请基于可信来源进行判断。
+
+城市: ${city}
+标题: ${event.title}
+类型: ${event.type}
+场馆: ${event.venue ?? '未知'}
+地址: ${event.address ?? '未知'}
+开始日期: ${event.start_date}
+结束日期: ${endDate}
+来源链接: ${event.source_url ?? '未知'}
+主办方: ${event.organizer ?? '未知'}
+
+请返回 JSON 格式，不要包含额外文本：
+{
+  "verified": true/false,
+  "confidence": 0-1 之间的数字,
+  "reason": "简短说明所依据的证据"
+}`;
+  }
+
+  private async verifyEventWithQiniu(event: ParsedEvent, city: string): Promise<boolean> {
+    if (!this.qiniuConfig.apiKey) {
+      return false;
+    }
+
+    const endpoint = this.qiniuConfig.endpoint.replace(/\/$/, '');
+    const prompt = this.buildVerificationPrompt(event, city);
+
+    try {
+      const response = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.qiniuConfig.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.qiniuConfig.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个严格的事实核查助手。请仅根据公开可信来源判断活动是否真实存在，返回 JSON 结果，不要输出多余文本。',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0,
+        }),
+      });
+
+      if (!response.ok) {
+        this.logger.error('七牛云验证接口调用失败', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return false;
+      }
+
+      const responseData = await response.json();
+      const content = responseData?.choices?.[0]?.message?.content ?? '';
+      const verificationResult = this.extractJsonObjectFromResponse(content);
+
+      if (!verificationResult) {
+        this.logger.warn('未能解析七牛云的验证响应，视为未通过', {
+          event: event.title,
+        });
+        return false;
+      }
+
+      if (typeof verificationResult.verified !== 'boolean') {
+        this.logger.warn('七牛云返回的验证结果缺少 verified 字段，视为未通过', {
+          event: event.title,
+          verificationResult,
+        });
+        return false;
+      }
+
+      return verificationResult.verified === true;
+    } catch (error) {
+      this.logger.error('调用七牛云验证接口时发生异常', {
+        error: (error as Error).message,
+        event: event.title,
+      });
+      return false;
+    }
+  }
+
+  private extractJsonObjectFromResponse(responseText: string): any | null {
+    if (!responseText) {
+      return null;
+    }
+
+    const objectStart = responseText.indexOf('{');
+    const objectEnd = responseText.lastIndexOf('}');
+
+    if (objectStart === -1 || objectEnd === -1 || objectEnd <= objectStart) {
+      return null;
+    }
+
+    const jsonString = responseText.slice(objectStart, objectEnd + 1);
+
+    try {
+      return JSON.parse(jsonString);
+    } catch (error) {
+      this.logger.error('解析七牛云响应 JSON 失败', {
+        error: (error as Error).message,
+        jsonString,
+      });
+      return null;
+    }
   }
 
   // 保持向后兼容的方法名
