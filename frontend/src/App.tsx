@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import dayjs from 'dayjs'
 import { EventItem, fetchEvents, triggerSync, verifyEvents } from './api'
 
 export function App() {
@@ -14,7 +13,7 @@ export function App() {
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [verifying, setVerifying] = useState(false)
+  const [verifyingId, setVerifyingId] = useState<number | null>(null)
   const [verificationResults, setVerificationResults] = useState<Record<number, boolean>>({})
   const [verificationMessage, setVerificationMessage] = useState('')
 
@@ -47,32 +46,29 @@ export function App() {
     }
   }
 
-  async function onVerifyCurrentPage() {
-    if (items.length === 0) {
-      setVerificationMessage('当前页没有数据可验证')
-      setVerificationResults({})
+  async function onVerifyEvent(item: EventItem) {
+    if (verifyingId !== null) {
       return
     }
 
-    setVerifying(true)
-    setVerificationMessage('正在验证，请稍候...')
-    try {
-      const ids = items.map((item) => item.id)
-      const res = await verifyEvents(ids)
-      const map: Record<number, boolean> = {}
-      res.results.forEach((result) => {
-        map[result.id] = result.verified
-      })
-      setVerificationResults(map)
+    setVerifyingId(item.id)
+    setVerificationMessage(`正在验证 “${item.title}”...`)
 
-      const successCount = res.results.filter((r) => r.verified).length
-      const failCount = res.results.length - successCount
-      setVerificationMessage(`验证完成：通过 ${successCount} 条，未通过 ${failCount} 条`)
+    try {
+      const res = await verifyEvents([item.id])
+      const result = res.results[0]
+      const verified = result?.verified === true
+
+      setVerificationResults((prev) => ({
+        ...prev,
+        [item.id]: verified,
+      }))
+
+      setVerificationMessage(verified ? `✅ “${item.title}” 验证通过` : `❌ “${item.title}” 未通过验证`)
     } catch (error) {
-      setVerificationMessage('验证失败，请稍后重试')
-      setVerificationResults({})
+      setVerificationMessage(`验证 “${item.title}” 失败，请稍后重试`)
     } finally {
-      setVerifying(false)
+      setVerifyingId(null)
     }
   }
 
@@ -108,9 +104,6 @@ export function App() {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
           <button onClick={() => { setPage(1); load() }} disabled={loading}>查询</button>
           <button onClick={onSync} disabled={loading}>手动抓取</button>
-          <button onClick={onVerifyCurrentPage} disabled={loading || verifying}>
-            {verifying ? '验证中...' : '验证当前页'}
-          </button>
         </div>
       </section>
 
@@ -125,7 +118,7 @@ export function App() {
               <th align="left">场馆</th>
               <th align="left">票价</th>
               <th align="left">来源</th>
-              <th align="left">验证状态</th>
+              <th align="left">验证</th>
             </tr>
           </thead>
           <tbody>
@@ -151,11 +144,21 @@ export function App() {
                   )}
                 </td>
                 <td>
-                  {verificationResults[e.id] === undefined
-                    ? '-'
-                    : verificationResults[e.id]
-                    ? <span style={{ color: '#16a34a' }}>已验证</span>
-                    : <span style={{ color: '#dc2626' }}>未通过</span>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <button
+                      onClick={() => onVerifyEvent(e)}
+                      disabled={loading || verifyingId === e.id}
+                    >
+                      {verifyingId === e.id ? '验证中...' : '验证'}
+                    </button>
+                    <div style={{ fontSize: 12 }}>
+                      {verificationResults[e.id] === undefined
+                        ? '未验证'
+                        : verificationResults[e.id]
+                        ? <span style={{ color: '#16a34a' }}>已验证</span>
+                        : <span style={{ color: '#dc2626' }}>未通过</span>}
+                    </div>
+                  </div>
                 </td>
               </tr>
             ))}
