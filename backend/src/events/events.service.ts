@@ -148,7 +148,7 @@ export class EventsService {
     const skipCount = (currentPage - 1) * itemsPerPage;
 
     queryBuilder
-      .orderBy('event.start_date', 'ASC')
+      .orderBy('event.start_date', 'DESC')
       .skip(skipCount)
       .take(itemsPerPage);
 
