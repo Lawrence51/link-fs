@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Event } from './event.entity';
 import crypto from 'crypto';
 import { QueryEventsDto } from './dto/query-events.dto';
+import { DeepseekService, ParsedEvent } from '../deepseek/deepseek.service';
 
 /**
  * 事件输入数据类型
@@ -36,6 +37,7 @@ export class EventsService {
   constructor(
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
+    private readonly deepseekService: DeepseekService,
   ) {}
 
   /**
@@ -203,5 +205,47 @@ export class EventsService {
 
   async list(queryOptions: QueryEventsDto): Promise<EventQueryResult> {
     return this.findEventsWithPagination(queryOptions);
+  }
+
+  async verifyEventsByIds(ids: number[]): Promise<Array<{ id: number; verified: boolean }>> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const events = await this.eventRepository.find({ where: { id: In(ids) } });
+    const eventMap = new Map(events.map((event) => [event.id, event]));
+
+    const results: Array<{ id: number; verified: boolean }> = [];
+
+    for (const id of ids) {
+      const event = eventMap.get(id);
+
+      if (!event) {
+        results.push({ id, verified: false });
+        continue;
+      }
+
+      const parsedEvent: ParsedEvent = {
+        title: event.title,
+        type: event.type,
+        venue: event.venue,
+        address: event.address,
+        start_date: event.start_date,
+        end_date: event.end_date,
+        source_url: event.source_url,
+        price_range: event.price_range,
+        organizer: event.organizer,
+      };
+
+      try {
+        const verified = await this.deepseekService.verifyEventDirectly(parsedEvent, event.city);
+        results.push({ id: event.id, verified });
+      } catch (error) {
+        this.logger.error('事件验证失败', { id: event.id, error: (error as Error).message });
+        results.push({ id: event.id, verified: false });
+      }
+    }
+
+    return results;
   }
 }

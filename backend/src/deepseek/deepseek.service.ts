@@ -430,6 +430,10 @@ export class DeepseekService {
     }
   }
 
+  async verifyEventDirectly(event: ParsedEvent, city: string): Promise<boolean> {
+    return this.verifyEventWithQiniu(event, city);
+  }
+
   private extractJsonObjectFromResponse(responseText: string): any | null {
     if (!responseText) {
       return null;

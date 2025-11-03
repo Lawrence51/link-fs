@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import dayjs from 'dayjs'
-import { EventItem, fetchEvents, triggerSync } from './api'
+import { EventItem, fetchEvents, triggerSync, verifyEvents } from './api'
 
 export function App() {
   const [items, setItems] = useState<EventItem[]>([])
@@ -14,6 +14,9 @@ export function App() {
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [verificationResults, setVerificationResults] = useState<Record<number, boolean>>({})
+  const [verificationMessage, setVerificationMessage] = useState('')
 
   const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize])
 
@@ -41,6 +44,35 @@ export function App() {
       await load()
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function onVerifyCurrentPage() {
+    if (items.length === 0) {
+      setVerificationMessage('当前页没有数据可验证')
+      setVerificationResults({})
+      return
+    }
+
+    setVerifying(true)
+    setVerificationMessage('正在验证，请稍候...')
+    try {
+      const ids = items.map((item) => item.id)
+      const res = await verifyEvents(ids)
+      const map: Record<number, boolean> = {}
+      res.results.forEach((result) => {
+        map[result.id] = result.verified
+      })
+      setVerificationResults(map)
+
+      const successCount = res.results.filter((r) => r.verified).length
+      const failCount = res.results.length - successCount
+      setVerificationMessage(`验证完成：通过 ${successCount} 条，未通过 ${failCount} 条`)
+    } catch (error) {
+      setVerificationMessage('验证失败，请稍后重试')
+      setVerificationResults({})
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -76,6 +108,9 @@ export function App() {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
           <button onClick={() => { setPage(1); load() }} disabled={loading}>查询</button>
           <button onClick={onSync} disabled={loading}>手动抓取</button>
+          <button onClick={onVerifyCurrentPage} disabled={loading || verifying}>
+            {verifying ? '验证中...' : '验证当前页'}
+          </button>
         </div>
       </section>
 
@@ -90,6 +125,7 @@ export function App() {
               <th align="left">场馆</th>
               <th align="left">票价</th>
               <th align="left">来源</th>
+              <th align="left">验证状态</th>
             </tr>
           </thead>
           <tbody>
@@ -114,11 +150,18 @@ export function App() {
                     '-'
                   )}
                 </td>
+                <td>
+                  {verificationResults[e.id] === undefined
+                    ? '-'
+                    : verificationResults[e.id]
+                    ? <span style={{ color: '#16a34a' }}>已验证</span>
+                    : <span style={{ color: '#dc2626' }}>未通过</span>}
+                </td>
               </tr>
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={7} align="center" style={{ padding: 24, color: '#666' }}>
+                <td colSpan={8} align="center" style={{ padding: 24, color: '#666' }}>
                   {loading ? '加载中...' : '暂无数据'}
                 </td>
               </tr>
@@ -145,6 +188,9 @@ export function App() {
       </section>
 
       <footer style={{ marginTop: 24, color: '#666', fontSize: 12 }}>
+        {verificationMessage && (
+          <div style={{ marginBottom: 8 }}>{verificationMessage}</div>
+        )}
         <div>提示：后端默认每天 09:00 自动抓取“当天的下周同一天”数据。你也可以使用上面的“手动抓取”按钮。</div>
       </footer>
     </div>

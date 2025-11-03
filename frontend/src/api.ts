@@ -19,6 +19,10 @@ export type ListResponse = {
   pageSize: number
 }
 
+export type VerifyResponse = {
+  results: Array<{ id: number; verified: boolean }>
+}
+
 const BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 export async function fetchEvents(params: Record<string, string | number | undefined>) {
@@ -37,4 +41,16 @@ export async function triggerSync(city: string) {
   })
   if (!res.ok) throw new Error('Failed to sync events')
   return await res.json()
+}
+
+export async function verifyEvents(ids: number[]) {
+  const res = await fetch(`${BASE_URL}/events/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) throw new Error('Failed to verify events')
+  return (await res.json()) as VerifyResponse
 }

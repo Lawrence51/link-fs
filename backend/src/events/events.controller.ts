@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { QueryEventsDto } from './dto/query-events.dto';
 import { DeepseekService } from '../deepseek/deepseek.service';
+import { VerifyEventsDto } from './dto/verify-events.dto';
 
 /**
  * 事件管理控制器
@@ -33,22 +34,11 @@ export class EventsController {
    */
   @Get()
   async getEventsList(@Query() queryParams: QueryEventsDto) {
-    // 调试：打印所有接收到的参数
-    console.log('=== 接收到的所有参数 ===');
-    console.log('原始 queryParams:', JSON.stringify(queryParams, null, 2));
-    console.log('city:', queryParams.city, '类型:', typeof queryParams.city);
-    console.log('page:', queryParams.page, '类型:', typeof queryParams.page);
-    console.log('pageSize:', queryParams.pageSize, '类型:', typeof queryParams.pageSize);
-    console.log('========================');
-    
     // 设置默认城市为杭州
     const searchCriteria: QueryEventsDto = { 
       ...queryParams, 
       city: queryParams.city ?? '杭州' 
     };
-    
-    console.log('最终查询条件:', JSON.stringify(searchCriteria, null, 2));
-    
     return this.eventsService.findEventsWithPagination(searchCriteria);
   }
 
@@ -110,5 +100,11 @@ export class EventsController {
       message: `成功同步 ${city} 的事件数据`,
       ...syncResult
     };
+  }
+
+  @Post('verify')
+  async verifyEvents(@Body() dto: VerifyEventsDto) {
+    const results = await this.eventsService.verifyEventsByIds(dto.ids);
+    return { results };
   }
 }
