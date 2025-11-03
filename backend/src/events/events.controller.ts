@@ -33,14 +33,21 @@ export class EventsController {
    */
   @Get()
   async getEventsList(@Query() queryParams: QueryEventsDto) {
-    // 调试：打印接收到的城市参数
-    console.log('接收到的 city 参数:', queryParams.city, '长度:', queryParams.city?.length, '字节:', Buffer.from(queryParams.city || '').toString('hex'));
+    // 调试：打印所有接收到的参数
+    console.log('=== 接收到的所有参数 ===');
+    console.log('原始 queryParams:', JSON.stringify(queryParams, null, 2));
+    console.log('city:', queryParams.city, '类型:', typeof queryParams.city);
+    console.log('page:', queryParams.page, '类型:', typeof queryParams.page);
+    console.log('pageSize:', queryParams.pageSize, '类型:', typeof queryParams.pageSize);
+    console.log('========================');
     
     // 设置默认城市为杭州
     const searchCriteria: QueryEventsDto = { 
       ...queryParams, 
       city: queryParams.city ?? '杭州' 
     };
+    
+    console.log('最终查询条件:', JSON.stringify(searchCriteria, null, 2));
     
     return this.eventsService.findEventsWithPagination(searchCriteria);
   }
