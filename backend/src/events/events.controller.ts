@@ -33,6 +33,9 @@ export class EventsController {
    */
   @Get()
   async getEventsList(@Query() queryParams: QueryEventsDto) {
+    // 调试：打印接收到的城市参数
+    console.log('接收到的 city 参数:', queryParams.city, '长度:', queryParams.city?.length, '字节:', Buffer.from(queryParams.city || '').toString('hex'));
+    
     // 设置默认城市为杭州
     const searchCriteria: QueryEventsDto = { 
       ...queryParams, 
