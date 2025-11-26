@@ -27,14 +27,15 @@ export class TasksService {
    * 每日自动同步任务
    * 
    * 每天上午9:00（上海时区）自动执行，
-   * 从DeepSeek AI获取最新的事件信息并同步到数据库。
+   * 从七牛云 AI 获取最新的事件信息并同步到数据库。
    * 
    * 任务流程：
    * 1. 获取目标城市（优先使用环境变量CRON_CITY）
-   * 2. 调用AI服务获取事件数据
-   * 3. 数据验证和格式化
-   * 4. 批量同步到数据库
-   * 5. 记录同步结果
+   * 2. 调用七牛云 AI 服务获取事件数据
+   * 3. 使用七牛云进行数据验证（防止幻觉数据）
+   * 4. 数据格式化
+   * 5. 批量同步到数据库
+   * 6. 记录同步结果
    */
   @Cron('0 0 18 * * *', { 
     name: 'daily-events-sync',
@@ -83,8 +84,8 @@ export class TasksService {
     } catch (error) {
       this.logger.error('❌ 每日同步任务失败', {
         city: targetCity,
-        error: error.message,
-        stack: error.stack
+        error: (error as Error).message,
+        stack: (error as Error).stack
       });
     }
   }

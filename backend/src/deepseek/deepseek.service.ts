@@ -69,7 +69,7 @@ export class DeepseekService {
   private loadQiniuConfiguration(): QiniuAIConfig {
     return {
       endpoint: this.configService.get<string>('QINIU_ENDPOINT', 'https://api.qnaigc.com/v1'),
-      model: this.configService.get<string>('QINIU_MODEL', 'claude-4.5-sonnet'),
+      model: this.configService.get<string>('QINIU_MODEL', 'claude-sonnet-4-20250514'),
       apiKey: this.configService.get<string>('QINIU_API_KEY'),
     };
   }
@@ -100,9 +100,17 @@ export class DeepseekService {
    * @returns 格式化的提示词
    */
   private buildEventQueryPrompt(city: string, targetDate: string): string {
-    return `请你根据公开渠道，列出${city}在日期 ${targetDate}（该日所在周的当天）相关的展会(expo)与演唱会(concert)。
+    return `
+角色: 你是一个严谨的市场情报分析师。 任务: 帮我搜索 今天起一个月内的 杭州举办的展会信息。 关键约束 (必须遵守):
 
-严格输出 JSON 数组，不要有任何多余文本,数据要进行核实，不要出现幻觉。每个元素尽量包含：
+强制联网: 必须使用浏览器/搜索工具检索最新信息。
+
+交叉验证: 找到一个展会后，必须再进行一次搜索，验证其“官网”或“官方公众号”发布的具体日期。如果只在第三方聚合网站看到，且无官方印证，请标记为“存疑”。
+
+时间锚点: 今天是 ${new Date()}，请不要提供已经过期的展会。
+
+
+严格输出 JSON 数组，如果从当前时间到一个月内没有确认的大型展会，请返回 ${null}“未找到确切排期”，不要编造。每个元素尽量包含：
 {
   "title": "事件标题",
   "type": "expo" | "concert",
@@ -156,13 +164,13 @@ export class DeepseekService {
       this.logger.debug(`成功解析出 ${parsedData.length} 个事件数据`);
       return parsedData;
     } catch (error) {
-      this.logger.error('JSON解析失败', { error: error.message, jsonString });
+      this.logger.error('JSON解析失败', { error: (error as Error).message, jsonString });
       return null;
     }
   }
 
   /**
-   * 从DeepSeek API获取指定城市的事件信息
+   * 从七牛云 API 获取指定城市的事件信息
    * 
    * @param city 目标城市，默认为杭州
    * @param targetDate 目标日期，默认为7天后
@@ -171,21 +179,17 @@ export class DeepseekService {
   async fetchEventsFromAI(city = '杭州', targetDate?: string): Promise<EventFetchResult> {
     const queryDate = targetDate ?? this.getDefaultTargetDate();
 
-    this.logger.log(`🔍 开始获取 ${city} 在 ${queryDate} 的事件信息`);
+    this.logger.log(`🔍 开始从七牛云获取 ${city} 在 ${queryDate} 的事件信息`);
 
-    // 检查API密钥
-    if (!this.config.apiKey) {
-      this.logger.warn('⚠️  API密钥未设置，返回空结果');
-      return { items: [], targetDate: queryDate };
-    }
-
+    // 检查七牛云API密钥
     if (!this.qiniuConfig.apiKey) {
-      this.logger.error('❌ 七牛云验证密钥未配置，无法验证事件数据');
+      this.logger.error('❌ 七牛云 API 密钥未配置，无法查询事件数据');
       return { items: [], targetDate: queryDate };
     }
 
     try {
-      const aiResponse = await this.callDeepSeekAPI(city, queryDate);
+      // 使用七牛云进行查询
+      const aiResponse = await this.callQiniuAPI(city, queryDate);
       const validatedEvents = await this.parseAndValidateEvents(aiResponse, city);
 
       this.logger.log(`✅ 成功获取并验证了 ${validatedEvents.length} 个有效事件`);
@@ -195,7 +199,7 @@ export class DeepseekService {
       this.logger.error('❌ 获取事件信息失败', {
         city,
         targetDate: queryDate,
-        error: error.message
+        error: (error as Error).message
       });
       return { items: [], targetDate: queryDate };
     }
@@ -209,7 +213,43 @@ export class DeepseekService {
   }
 
   /**
-   * 调用DeepSeek API
+   * 调用七牛云 API 进行事件查询
+   */
+  private async callQiniuAPI(city: string, targetDate: string): Promise<string> {
+    const prompt = this.buildEventQueryPrompt(city, targetDate);
+    const endpoint = this.qiniuConfig.endpoint.replace(/\/$/, '');
+
+    this.logger.debug(`调用七牛云 API: ${endpoint}/chat/completions`);
+
+    const response = await fetch(`${endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.qiniuConfig.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.qiniuConfig.model,
+        messages: [
+          { 
+            role: 'system', 
+            content: '你是一个专业的事件信息数据API。请严格按照要求返回JSON格式的数据，不要包含任何额外的文本或格式标记。你必须基于真实可靠的公开信息源，不要编造或臆测任何数据。' 
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1, // 极低温度，减少幻觉
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`七牛云 API 调用失败: ${response.status} ${response.statusText}`);
+    }
+
+    const responseData = await response.json();
+    return responseData?.choices?.[0]?.message?.content ?? '';
+  }
+
+  /**
+   * 调用DeepSeek API（已弃用，保留用于向后兼容）
    */
   private async callDeepSeekAPI(city: string, targetDate: string): Promise<string> {
     const prompt = this.buildEventQueryPrompt(city, targetDate);
